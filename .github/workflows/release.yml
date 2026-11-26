@@ -1,0 +1,116 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  build-android:
+    name: build-android
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: bash scripts/empaquetar.sh android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: entrega/*
+          if-no-files-found: error
+
+  build-windows:
+    name: build-windows
+    needs: validate
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: bash scripts/empaquetar.sh windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: entrega/*
+          if-no-files-found: error
+
+  build-macos:
+    name: build-macos
+    needs: validate
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: bash scripts/empaquetar.sh macos
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: entrega/*
+          if-no-files-found: error
+
+  build-ios:
+    name: build-ios
+    needs: validate
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: bash scripts/empaquetar.sh ios
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: entrega/*
+          if-no-files-found: error
+
+  release:
+    name: release
+    needs: [build-android, build-windows, build-macos, build-ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: entrega
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: aula-${{ github.sha }}
+          target_commitish: ${{ github.sha }}
+          files: entrega/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
